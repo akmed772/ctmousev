@@ -34,7 +34,7 @@
 ; locals
 
 CTMVER		equ <"2.1">		; major driver version
-CTMRELEASE	equ <"2.1 b4V007">	; full driver version with suffixes
+CTMRELEASE	equ <"2.1 b4V008">	; full driver version with suffixes
 driverversion	equ 705h		; imitated Microsoft driver version
 ; at least 705h because our int 33 function _26 operates in 7.05+ style
 
@@ -2932,10 +2932,15 @@ endif
 		mov	dh,0A0h			; A000h: [0Dh-13h]
 		MOVSEG	es,0A000h,bx,nothing
 		xor	si,si			; [nextxor] for [0Dh-13h]
+if DBCSDOSV
+		cmp	al,72h
+		je	@@mode72
+endif
 		cmp	al,13h
 		ja	@@nonstandard
 		je	@@mode13
 ; mode 8-0Dh
+@@mode72:
 		cmp	al,0Dh
 		jb	@@nonstandard
 		mov	ah,06h			; PUSH ES opcode for [0Dh-12h]
@@ -2984,12 +2989,12 @@ endif
 		mov	di,200
 ;		DEBUGOUT 033h
 @@notdbcsvm03:
-;		DEBUGOUT 0E7h
-;		DEBUGOUTW ax
-;		DEBUGOUTW bx
-;		DEBUGOUTW cx
-	;	DEBUGOUTW dx
-;	DEBUGOUTW di
+		DEBUGOUT 0E7h
+		DEBUGOUTW ax
+		DEBUGOUTW bx
+		DEBUGOUTW cx
+		DEBUGOUTW dx
+	DEBUGOUTW di
 		mov	[screenheight],di
 		mov	[scanline],ax		; screen line width in bytes
 		mov	[bitmapshift],cl	; log2(screen/memory ratio)
