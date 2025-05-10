@@ -519,14 +519,15 @@ IRQhandler	endp
 ;
 enablePS2	proc
 ; -X-		call	@disablePS2		; unhooked IRQ
+		PS2serv	0C201h			; reset device to clear buffer
 		MOVSEG	es,cs,,@TSRcode
 		mov	bx,TSRcref:PS2handler	; -X- real handler now
 		PS2serv	0C207h			; set mouse handler in ES:BX
+		mov	bh,5			; -X- 100, KoKo uses 3 (60)
+		call	setRateTSR		; -X- ; set rate during mouse is inactive
 		mov	bh,1
 		PS2serv	0C200h			; set mouse on (bh=1)
 ; -X-		DOSSetIntr 68h+12,,,@TSRcode:IRQhandler
-		mov	bh,5			; -X- 100, KoKo uses 3 (60)
-		call	setRateTSR		; -X-
 		ret
 ; -X- PS2dummy:       retf
 enablePS2	endp
@@ -584,8 +585,11 @@ PS2WHEELCODE	label	byte		; jump to wheel or plain: test 0/-1
 		; flags: (yext) (xext) ysign xsign 1 btn3 btn1 btn2
 		; ("ext" flag could be used to trigger "xor value,100h")
 @@PS2PLAIN:	; old cutemouse 1.9 PS/2 handler, non-wheel
+DEBUGOUT 0c0h
 		; note: ctmouse 1.9 code uses only sign, not ext
 		mov	al,[bp+_ARG_OFFS_+6]	; buttons and flags
+DEBUGOUT al
+DEBUGOUT 0c1h
 if USE_286
 		mov	bl,al			; backup, xchg will restore
 		shl	al,3			; CF=Y sign bit, MSB=X sign
@@ -598,8 +602,12 @@ endif
 	db 1ah, 0edh	; JWASM and TASM use opposite encoding
 		cbw				; extend X sign bit
 		mov	al,[bp+_ARG_OFFS_+4]	; AX=X movement
+DEBUGOUT al
+DEBUGOUT 0c2h
 		xchg	bx,ax			; X to BX, buttons to AL
 		mov	cl,[bp+_ARG_OFFS_+2]	; CX=Y movement
+DEBUGOUT cl
+DEBUGOUT 0c3h
 		; wheelmask is 0 now, so no wheel data is expected in AH
 		j	@@PS2DONE
 
@@ -1019,8 +1027,14 @@ mouseupdate	endp
 updateposition	proc
 		test	ax,ax
 		jz	@@uposret
+		DEBUGOUT 0DAh
+		DEBUGOUT ah
+		DEBUGOUT 0DBh
+		DEBUGOUT al
 		DEBUGOUT 0DCh
-		DEBUGOUTW ax
+		DEBUGOUT bh
+		DEBUGOUT 0DDh
+		DEBUGOUT bl
 		mov	si,ax
 ;	if_ sign
 	jns @@upns
