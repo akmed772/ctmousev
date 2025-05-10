@@ -2599,51 +2599,6 @@ ischardbcs proc
 	pop		es
 	ret
 ischardbcs endp
-; in:
-; 	bp = offset for chr/attr to scan
-;	cx = number of characters
-; out:
-;   cl = 1 - 3 (1: SBCS, 2: DBCS 1st, 3: DBCS 2nd)
-;   si = bp = offset for the last character
-; changes:
-getchartypedbcs	proc
-	push	es
-	push	bx
-;	push	dx
-;	push	bp
-	mov		si,bp	;set DS:SI offset for buffer to scan
-	mov		dl,1
-	les		di,[dbcstblptr]	;set ES:DI for DBCS lead-byte table
-	mov		bp,di
-	cld
-@@scannextchar:
-	lodsw
-	cmp		dl,2
-	je		@@ischar2nd
-	mov		dl,1
-@@looknexttbl:
-	mov		bx,es:[di]
-	or		bh,bl
-	jz		@@tonextchar
-	scasb	;JPN: 81,9F,E0,FC,0,0h  KOR:81,BF,0,0h  CHT:81,FC,0,0h
-	jb		@@tonextchar
-	scasb
-	ja		@@looknexttbl
-@@ischar2nd:
-	inc		dl
-@@tonextchar:
-	mov		di,bp
-	loop	@@scannextchar
-	dec		si	;move pointer back to the last chr
-	dec		si
-	mov		bp,si
-	mov		cl,dl
-;	pop		bp
-;	pop		dx
-	pop		bx
-	pop		es
-	ret
-getchartypedbcs	endp
 
 ;========================================================================
 ;    Determine the current DOS is in DBCS mode
