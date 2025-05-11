@@ -34,7 +34,7 @@
 ; locals
 
 CTMVER		equ <"2.1">		; major driver version
-CTMRELEASE	equ <"2.1 b4V008">	; full driver version with suffixes
+CTMRELEASE	equ <"2.1 b4V009">	; full driver version with suffixes
 driverversion	equ 705h		; imitated Microsoft driver version
 ; at least 705h because our int 33 function _26 operates in 7.05+ style
 
@@ -243,6 +243,13 @@ lowright	POINT	<>		; lower right of update region
 pos		POINT	<>		; virtual cursor position
 granpos		POINT	<>		; granulated virtual cursor position
 UIR@		dd	?		; user interrupt routine address
+if DBCSDOSV
+	dbcstblptr	dd	?    ;pointer to DBCS lead-byte table in segment:offset
+	dbcsbytesperchar	dw	?	;2: Mode 03, 4: Mode 73, 0: Others
+	dbcscursorposw	db	?
+	dbcscursorposh	db	?
+	dbcssavedtext	dw	?
+endif
 
 		even
 ClearArea = $
@@ -422,8 +429,11 @@ videoregs@	label RGROUPDEF
 	RGROUPDEF <3CAh,reg_GPOS2,def_GPOS2>	; Graphics 2 Position
 endif						; -X- USERIL
 
-;----- registers values for DOS/V support -----
+;----- for DOS/V support -----
 if DBCSDOSV
+	dbcsstrbuf	db	4*81 dup (?)	;max 80 chr in line
+	dbcsint10calling	db	0
+
 DEBUGOUT	macro	val
 	cli
 	push	ax
@@ -432,7 +442,6 @@ DEBUGOUT	macro	val
 	pop	ax
 	sti
 endm
-
 DEBUGOUTW	macro	val
 	cli
 	push	ax
@@ -443,18 +452,6 @@ DEBUGOUTW	macro	val
 	pop	ax
 	sti
 endm
-
-	dbcsstrbuf	db	4*81 dup (?)	;max 80 chr in line
-	dbcstblptr	dd	0    ;pointer to DBCS lead-byte table in segment:offset
-	dbcsbytesperchar	dw	0	;2: Mode 03, 4: Mode 73, 0: Others
-;	dbcsisdosv	db	0
-	dbcscursorposw	db	0
-	dbcscursorposh	db	0
-	;dbcsbuf1	dw	0
-	;dbcsbuf2	dw	0
-	;dbcsbufsize	dw	0
-	dbcsint10calling	db	0
-	dbcssavedtext	dw	0
 endif
 
 ;============================= IRQ HANDLERS =============================
