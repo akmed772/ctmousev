@@ -244,7 +244,6 @@ pos		POINT	<>		; virtual cursor position
 granpos		POINT	<>		; granulated virtual cursor position
 UIR@		dd	?		; user interrupt routine address
 if DBCSDOSV
-	dbcstblptr	dd	?    ;pointer to DBCS lead-byte table in segment:offset
 	dbcsbytesperchar	dw	?	;2: Mode 03, 4: Mode 73, 0: Others
 	dbcscursorposw	db	?
 	dbcscursorposh	db	?
@@ -431,9 +430,11 @@ endif						; -X- USERIL
 
 ;----- for DOS/V support -----
 if DBCSDOSV
+	dbcstblptr	dd	?    ;pointer to DBCS lead-byte table in segment:offset
 	dbcsstrbuf	db	4*81 dup (?)	;max 80 chr in line
+	dbcsdebugtext	db	2*80 dup (?)
 	dbcsint10calling	db	0
-
+Name_FileDbg	db	"CTDBG.TXT",0
 DEBUGOUT	macro	val
 	cli
 	push	ax
@@ -452,6 +453,110 @@ DEBUGOUTW	macro	val
 	pop	ax
 	sti
 endm
+DEBUGSCRWRITE	macro
+	push	es
+	push	ax
+	push	bx
+	push	cx
+	push	dx
+	push	bp
+	mov	ax,ds
+	mov	es,ax
+	mov	ax,offset dbcsdebugtext
+	mov	bp,ax
+	mov dx,1600h
+	mov	cx,80
+	mov	bx,0007h
+	mov	ax,1300h	; INT10h,AH=13h: read/write DBCS chars/attrs (DOS/V)
+						; (in) AL=function (20h: write raw characters and attributes)
+						;      BH=page(0), CX=number of chars, DH,DL=row,column
+						;      ES:BP=buffer for chars/attrs
+						; (out) none
+						; Note: Control characters do nothing unlike AL=0-3 functions.
+						;       Writing data out of screen will be discarded.
+	INT10RWCHARDOSV
+	pop		bp
+	pop		dx
+	pop		cx
+	pop		bx
+	pop		ax
+	pop		es
+endm
+DEBUGFPRINT macro val8
+	push ax
+	push cx
+	push dx
+	mov	al,val8
+	call bintohex	;dh,dl=hex in char code
+	mov ah,03ch
+	xor cx,cx
+	mov dx,Name_FileDbg
+	int 021h
+
+	pop	dx
+	pop	cx
+	pop	ax
+endm
+DEBUGPRINT macro val8,dcposx
+	push ax
+	push dx
+	mov	al,val8
+	call bintohex
+	push si
+	mov si,offset dbcsdebugtext
+	add si,dcposx
+	mov [si],dh
+	inc si
+	mov [si],dl
+	pop si
+	pop	dx
+	pop	ax
+endm
+DEBUGPRINT4 macro val4,dcposx
+	push ax
+	push dx
+	mov	al,val4
+	call bintohex
+	push si
+	mov si,offset dbcsdebugtext
+	add si,dcposx
+	mov [si],dl
+	pop si
+	pop	dx
+	pop	ax
+endm
+DEBUGWB macro val4,dcposx
+	push si
+	mov si,offset dbcsdebugtext
+	add si,dcposx
+	mov byte ptr [si],val4
+	pop si
+endm
+bintohex proc
+printhex:;al = 2-digit hexadecimal value, dh, dl = byte char
+	push	ax
+	shr	al, 1
+	shr	al, 1
+	shr	al, 1
+	shr	al, 1
+	add	al, 30h
+	cmp	al, 39h
+	jbe	@@n1
+	add	al, 7
+@@n1:
+	mov	dh,al
+	pop	ax
+	push	ax
+	and	al, 0fh
+	add	al, 30h
+	cmp	al, 39h
+	jbe	@@n2
+	add	al, 7
+@@n2:
+	mov	dl,al
+	pop	ax
+	ret
+bintohex endp 
 endif
 
 ;============================= IRQ HANDLERS =============================
@@ -583,11 +688,11 @@ PS2WHEELCODE	label	byte		; jump to wheel or plain: test 0/-1
 		; flags: (yext) (xext) ysign xsign 1 btn3 btn1 btn2
 		; ("ext" flag could be used to trigger "xor value,100h")
 @@PS2PLAIN:	; old cutemouse 1.9 PS/2 handler, non-wheel
-DEBUGOUT 0c0h
+;DEBUGOUT 0c0h
 		; note: ctmouse 1.9 code uses only sign, not ext
 		mov	al,[bp+_ARG_OFFS_+6]	; buttons and flags
-DEBUGOUT al
-DEBUGOUT 0c1h
+;DEBUGOUT al
+;DEBUGOUT 0c1h
 if USE_286
 		mov	bl,al			; backup, xchg will restore
 		shl	al,3			; CF=Y sign bit, MSB=X sign
@@ -600,12 +705,12 @@ endif
 	db 1ah, 0edh	; JWASM and TASM use opposite encoding
 		cbw				; extend X sign bit
 		mov	al,[bp+_ARG_OFFS_+4]	; AX=X movement
-DEBUGOUT al
-DEBUGOUT 0c2h
+;DEBUGOUT al
+;DEBUGOUT 0c2h
 		xchg	bx,ax			; X to BX, buttons to AL
 		mov	cl,[bp+_ARG_OFFS_+2]	; CX=Y movement
-DEBUGOUT cl
-DEBUGOUT 0c3h
+;DEBUGOUT cl
+;DEBUGOUT 0c3h
 		; wheelmask is 0 now, so no wheel data is expected in AH
 		j	@@PS2DONE
 
@@ -1025,14 +1130,14 @@ mouseupdate	endp
 updateposition	proc
 		test	ax,ax
 		jz	@@uposret
-		DEBUGOUT 0DAh
-		DEBUGOUT ah
-		DEBUGOUT 0DBh
-		DEBUGOUT al
-		DEBUGOUT 0DCh
-		DEBUGOUT bh
-		DEBUGOUT 0DDh
-		DEBUGOUT bl
+		;DEBUGOUT 0DAh
+		;DEBUGOUT ah
+		;DEBUGOUT 0DBh
+		;DEBUGOUT al
+		;DEBUGOUT 0DCh
+		;DEBUGOUT bh
+		;DEBUGOUT 0DDh
+		;DEBUGOUT bl
 		mov	si,ax
 ;	if_ sign
 	jns @@upns
@@ -1579,17 +1684,17 @@ endif						; -X- USERIL
 ;========================================================================
 
 drawcursor	proc
-		DEBUGOUT 090h
+		;DEBUGOUT 090h
 		mov	cx,[videoseg]
-		DEBUGOUTW [granpos.X]
-		DEBUGOUTW [granpos.Y]
-		DEBUGOUT [cursortype]
+		;DEBUGOUTW [granpos.X]
+		;DEBUGOUTW [granpos.Y]
+		;DEBUGOUT [cursortype]
 		;jcxz	@@drawret		; exit if nonstandard mode
 
 		xor	cx,cx
 		cmp	[nocursorcnt],cl	; OPTIMIZE: CL instead 0
 		jnz	restorescreen		; jump if cursor disabled
-		DEBUGOUT 091h
+		;DEBUGOUT 091h
 
 		mov	ax,[granumask.Y]
 		xchg	cl,[newcursor]		; remove redraw request
@@ -1598,7 +1703,7 @@ drawcursor	proc
 		mov	bx,[granpos.Y]		; cursor position Y
 		mov	ax,[granpos.X]		; cursor position X
 		jz	graphcursor		; jump if graphics mode
-		DEBUGOUT 092h
+		;DEBUGOUT 092h
 
 ;===== text mode cursor
 ;if DBCSDOSV
@@ -1610,7 +1715,7 @@ drawcursor	proc
 ;endif
 		call	checkifseen
 		jc	restorescreen		; jump if not in seen area
-		DEBUGOUT 093h
+		;DEBUGOUT 093h
 
 		call	gettxtoffset
 		cmp	di,[cursor@]
@@ -1629,7 +1734,7 @@ drawcursor	proc
 	jz @@drz
 
 ;----- position hardware text mode cursor
-		DEBUGOUT 094h
+		;DEBUGOUT 094h
 
 		shr	di,1
 if USERIL					; -X-
@@ -1651,7 +1756,7 @@ endif						; -X- USERIL
 @@drz:
 
 ;----- draw software text mode cursor
-		DEBUGOUT 095h
+		;DEBUGOUT 095h
 
 if DBCSDOSV
 		mov	[cursor@],di
@@ -1661,7 +1766,7 @@ if DBCSDOSV
 		jmp	@@drawret
 @@notdbcsmode:
 endif
-		DEBUGOUT 096h
+		;DEBUGOUT 096h
 		mov	[cursor@],di
 		mov	ax,es:[di]		; save char under cursor
 		mov	textbuf[2],ax
@@ -1707,7 +1812,7 @@ if DBCSDOSV
 		cmp	[dbcsbytesperchar],0
 		je	@@notdbcsmode
 ;		DEBUGOUT 0A9h
-		call	restoredbcsattr
+		;call	restoredbcsattr
 		jmp	@drawret
 @@notdbcsmode:
 endif
@@ -2321,8 +2426,8 @@ endm
 ;		dbcsbufsize, dbcsbuf1, dbcsbuf2, textbuf
 ; Call:	getattrdbcs, INT10RWCHARDOSV
 storedbcsattr	proc
-;	DEBUGOUT 013h
-;	DEBUGOUT 014h
+	DEBUGOUT 013h
+	DEBUGOUT 014h
 	;convert vscreen x-y to box x-y
 	cmp [dbcsint10calling], 1
 	je	@@skipall
@@ -2349,7 +2454,20 @@ storedbcsattr	proc
 	call	getattrdbcs	; In: DX (row, column) OUT: (where the first chr/attr stored)
 ;	mov	[dbcsbufsize],cx
 ;	DEBUGOUT 018h
-	
+	mov	ax,[si-4]
+;	DEBUGPRINT al,50
+;	DEBUGPRINT ah,52
+	mov	ax,[si-2]
+;	DEBUGPRINT al,55
+;	DEBUGPRINT ah,57
+	mov	ax,[si]
+;	DEBUGPRINT al,60
+;	DEBUGPRINT ah,62
+	mov	ax,[si+2]
+;	DEBUGPRINT al,65
+;	DEBUGPRINT ah,67
+;	DEBUGPRINT cl,70
+	DEBUGSCRWRITE
 	;mask attribute in buffer
 	mov	ax,[si]
 	mov	[dbcssavedtext],ax
@@ -2407,6 +2525,7 @@ storedbcsattr	proc
 	ret
 storedbcsattr endp
 
+
 ;========================================================================
 ;    Restore characters/attributes for cursor update in DBCS text mode
 ;========================================================================
@@ -2457,6 +2576,8 @@ restoredbcsattr endp
 ; Modf:	AX, BX
 ; Call:	INT10RWCHARDOSV
 getattrdbcs	proc
+;	DEBUGPRINT dh,10
+;	DEBUGPRINT dl,12
 	mov		ax,cs
 	mov		es,ax
 	mov		bp,offset dbcsstrbuf
@@ -2515,6 +2636,8 @@ getattrdbcs	proc
 	pop		bx
 	pop		ax
 
+	dec cx
+;	DEBUGPRINT cl,20
 ;----------------------------------------
 ; in:
 ; 	bp = offset for chr/attr to scan
@@ -2530,18 +2653,33 @@ getattrdbcs	proc
 ;	mov		bp,di
 	cld
 	mov		bx,[dbcsbytesperchar]	;n = 2 or 4 bytes/char
+;	DEBUGPRINT bl,23
+	mov di,0;debug
+	push cx
+	mov cx, 79
+@@dbgcloop:
+	DEBUGWB 20h,di
+	inc di
+	loop @@dbgcloop
+	pop cx
+	mov di,0;debug
 @@scanchar:
 	mov		al,[si]
 	add		si,bx
 	cmp		dl,2
 	je		@@ischar2nd
 	mov		dl,1
-	call	ischardbcs
+	call	ischardbcsdbg	; in: al = char, out: CF = 0 (SBCS), 1 (DBCS)
 	jnc		@@tonextchar
 @@ischar2nd:
 	inc		dl
 @@tonextchar:
 ;	mov		di,bp
+;	DEBUGPRINT4 dl,di
+;	inc di
+;	DEBUGPRINT al,di
+	inc di
+	inc di
 	loop	@@scanchar
 
 	sub		si,bx	;move pointer back to the last chr
@@ -2550,12 +2688,14 @@ getattrdbcs	proc
 	pop		bx
 	pop		es
 ;----------------------------------------
+;	DEBUGPRINT cl,30
 ;	mov		cl
 	pop		dx
+	dec dl
 ;	mov		dx,word ptr [dbcscursorposw]	;get current cursor position
 	cmp		cl,3
 	jne		@@sbcsordbcs1st	; skip if current pos is SBCS
-	;move position one column ahead if the current pos is 2nd byte of DBCS char
+	;move position one column back if the current pos is 2nd byte of DBCS char
 ;	sub		bp,2
 	sub		si,[dbcsbytesperchar]
 	mov		bp,si
@@ -2567,6 +2707,11 @@ getattrdbcs	proc
 @@sbcsordbcs1st:
 	mov ch, 0
 @@scanend:
+	mov	ax,bp
+;	DEBUGPRINT cl,33
+;	DEBUGPRINT ah,40
+;	DEBUGPRINT al,42
+	DEBUGSCRWRITE
 	ret
 getattrdbcs	endp
 
@@ -2580,15 +2725,15 @@ ischardbcs proc
 @@looknexttbl:
 	mov		bx,es:[di]
 	or		bh,bl
-	jz		@@ischar1st
+	jz		@@issbcs
 	scasb	;JPN: 81,9F,E0,FC,0,0h  KOR:81,BF,0,0h  CHT:81,FC,0,0h
-	jb		@@ischar1st
+	jb		@@issbcs
 	scasb
 	ja		@@looknexttbl
-;@@ischar2nd:
+;@@isdbcs:
 	stc
 	jmp		@@endscan
-@@ischar1st:
+@@issbcs:
 	clc
 @@endscan:
 	pop		bx
@@ -2596,6 +2741,49 @@ ischardbcs proc
 	pop		es
 	ret
 ischardbcs endp
+
+; in: al = char, out: CF = 0 (SBCS), 1 (DBCS)
+ischardbcsdbg proc
+	push	es
+	push	di
+	push	bx
+	push cx
+	mov cx,0
+	DEBUGPRINT al,cx
+	inc	cx
+	inc	cx
+	inc	cx
+	les		di,[dbcstblptr]	;set ES:DI for DBCS lead-byte table
+	cld
+@@looknexttbl:
+	mov		bx,es:[di]
+	DEBUGPRINT bh,cx
+	inc	cx
+	inc	cx
+	DEBUGPRINT bl,cx
+	inc	cx
+	inc	cx
+	inc	cx
+	or		bh,bl
+	jz		@@issbcs
+	scasb	;JPN: 81,9F,E0,FC,0,0h  KOR:81,BF,0,0h  CHT:81,FC,0,0h
+	jb		@@issbcs
+	scasb
+	ja		@@looknexttbl
+;@@isdbcs:
+	DEBUGPRINT 0fdh,cx
+	stc
+	jmp		@@endscan
+@@issbcs:
+	DEBUGPRINT 0feh,cx
+	clc
+@@endscan:
+	pop cx
+	pop		bx
+	pop		di
+	pop		es
+	ret
+ischardbcsdbg endp
 
 ;========================================================================
 ;    Determine the current DOS is in DBCS mode
@@ -2632,7 +2820,7 @@ testB800	proc ;called from INT 33 handler 21 software reset
 	push	es
 	push	di
 	push	ax
-	DEBUGOUT 0B8h
+	;DEBUGOUT 0B8h
 	mov	ax,0B800h
 	mov es,ax
 	mov	di,0
@@ -2661,12 +2849,12 @@ testB800	proc ;called from INT 33 handler 21 software reset
 ;	cmp	al,[si]
 ;	je	@@b800isram
 @@b800isnotram:
-	DEBUGOUT 0A1h
+	;DEBUGOUT 0A1h
 	stc
 	jmp	@@b800end
 @@b800isram:
 	clc
-	DEBUGOUT 0A2h
+	;DEBUGOUT 0A2h
 ;	mov	[si],ah	;restore B800:0h
 ;	sti
 @@b800end:
@@ -2844,23 +3032,23 @@ if DBCSDOSV
 		call	detisdosdbcs
 	jz	@@notdosv
 ;		mov	[cs:dbcsisdosv],2
-		DEBUGOUT 060h
+		;DEBUGOUT 060h
 		cmp al,3
 	je	@@vm3
-		DEBUGOUT 061h
+		;DEBUGOUT 061h
 		cmp	al,073h
 	je	@@vm73
 	jne	@@notdosv
 @@vm3:
-		DEBUGOUT 062h
+		;DEBUGOUT 062h
 ; if $disp.sys is active, the actual video memory is located at A0000-AFFFFh
 		call	testb800
 	jnc	@@notdosv
-		DEBUGOUT 063h
+		;DEBUGOUT 063h
 		mov	[cs:dbcsbytesperchar], 2
 	jmp	@@vm3or73end
 @@vm73:
-		DEBUGOUT 064h
+		;DEBUGOUT 064h
 		mov	[cs:dbcsbytesperchar], 4
 @@vm3or73end:
 @@notdosv:
@@ -2986,12 +3174,12 @@ endif
 		mov	di,200
 ;		DEBUGOUT 033h
 @@notdbcsvm03:
-		DEBUGOUT 0E7h
-		DEBUGOUTW ax
-		DEBUGOUTW bx
-		DEBUGOUTW cx
-		DEBUGOUTW dx
-	DEBUGOUTW di
+		;DEBUGOUT 0E7h
+		;DEBUGOUTW ax
+		;DEBUGOUTW bx
+		;DEBUGOUTW cx
+		;DEBUGOUTW dx
+	;DEBUGOUTW di
 		mov	[screenheight],di
 		mov	[scanline],ax		; screen line width in bytes
 		mov	[bitmapshift],cl	; log2(screen/memory ratio)
