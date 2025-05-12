@@ -29,7 +29,7 @@ S_inLT		db 'Logitech mode',eos
 S_wheel		db ' (wheel present)'
 S_CRLF		db nl,eos
 
-Copyright	db nl,'CuteMouse v',CTMRELEASE,' [FreeDOS]',nl,eos
+Copyright	db nl,'CuteMouse v',CTMRELEASE,' with DOS/V support',nl,eos
 Syntax		label byte
     db 0,nl,'Options:',nl
     db '  /V	   - reverse search: find PS/2 after serial mouse',nl

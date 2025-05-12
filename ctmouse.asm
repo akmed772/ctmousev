@@ -35,7 +35,7 @@
 ; locals
 
 CTMVER		equ <"2.1">		; major driver version
-CTMRELEASE	equ <"2.1 b4V010">	; full driver version with suffixes
+CTMRELEASE	equ <"2.1 b4V01">	; full driver version with suffixes
 driverversion	equ 705h		; imitated Microsoft driver version
 ; at least 705h because our int 33 function _26 operates in 7.05+ style
 
@@ -47,6 +47,7 @@ USERIL           = 0		; include code for INT 10/Fn EGA functions
 DBCSDOSV	 = 1        ; include code for DOS/V
 
 ; %define PS2DEBUG 1		; print debug messages for PS2serv calls
+; DBCSDOSVDEBUG	 = 1        ; debug code for DOS/V
 
 ;------------------------------------------------------------------------
 
@@ -434,8 +435,8 @@ if DBCSDOSV
 	dbcsstrbuf	db	4*81 dup (?)	;max 80 chr in line
 	dbcsdebugtext	db	2*80 dup (?)
 	dbcsint10calling	db	0
-Name_FileDbg	db	"CTDBG.TXT",0
-DEBUGOUT	macro	val
+ifdef DBCSDOSVDEBUG
+DEBUGOUT	macro	val	;logging to 86Box POST card
 	cli
 	push	ax
 	mov	al,val
@@ -557,6 +558,7 @@ printhex:;al = 2-digit hexadecimal value, dh, dl = byte char
 	pop	ax
 	ret
 bintohex endp 
+endif
 endif
 
 ;============================= IRQ HANDLERS =============================
@@ -1667,7 +1669,7 @@ endif						; -X- USERIL
 
 drawcursor	proc
 		mov	cx,[videoseg]
-		;jcxz	@@drawret		; exit if nonstandard mode
+		jcxz	@@drawret		; exit if nonstandard mode
 
 		xor	cx,cx
 		cmp	[nocursorcnt],cl	; OPTIMIZE: CL instead 0
@@ -1682,13 +1684,7 @@ drawcursor	proc
 		jz	graphcursor		; jump if graphics mode
 
 ;===== text mode cursor
-;if DBCSDOSV
-;		mov	ax,[granumask.Y]
-;		neg	ax
-;		mov	si,ax
-;else
 		mov	si,8			; OPTIMIZE: instead -[granumask.Y]
-;endif
 		call	checkifseen
 		jc	restorescreen		; jump if not in seen area
 
@@ -1731,15 +1727,14 @@ endif						; -X- USERIL
 
 ;----- draw software text mode cursor
 
-if DBCSDOSV
 		mov	[cursor@],di
+if DBCSDOSV
 		cmp	[dbcsbytesperchar],0
 		je	@@notdbcsmode
 		call	storedbcsattr
 		jmp	@@drawret
 @@notdbcsmode:
 endif
-		mov	[cursor@],di
 		mov	ax,es:[di]		; save char under cursor
 		mov	textbuf[2],ax
 		and	ax,[startscan]
@@ -2543,7 +2538,6 @@ getattrdbcs	proc
 ;	pop		bx
 ;	pop		ax
 
-;	dec cx
 ;----------------------------------------
 ; in:
 ; 	bp = offset for chr/attr to scan
@@ -2577,8 +2571,6 @@ getattrdbcs	proc
 	pop		es
 ;----------------------------------------
 	pop		dx
-;	dec dl
-;	mov		dx,word ptr [dbcscursorposw]	;get current cursor position
 	cmp		cl,3
 	jb		@@sbcsordbcs1st	; skip if current pos is SBCS
 	;move position one column back if the current pos is 2nd byte of DBCS char
@@ -2709,7 +2701,6 @@ setupvideo	endp
 ; Call:	hidecursor, @savecutpos
 ;
 softreset_21	proc
-;		DEBUGOUT 0E0h
 		mov	[_ARG_BX_],3
 buttonscnt	equ	byte ptr [$-2]		; buttons count (2/3)
 		mov	[_ARG_AX_],0FFFFh
@@ -2983,12 +2974,6 @@ endif
 		je	@@notdbcsvm03
 		mov	di,200
 @@notdbcsvm03:
-		;DEBUGOUT 0E7h
-		;DEBUGOUTW ax
-		;DEBUGOUTW bx
-		;DEBUGOUTW cx
-		;DEBUGOUTW dx
-		;DEBUGOUTW di
 		mov	[screenheight],di
 		mov	[scanline],ax		; screen line width in bytes
 		mov	[bitmapshift],cl	; log2(screen/memory ratio)
@@ -2999,7 +2984,6 @@ endif
 		mov	byte ptr videoseg[1],dh
 		shl	ax,cl
 		pop	si
-;		DEBUGOUT 0E8h
 
 ;----- set ranges and center cursor (AX=screenwidth, DI=screenheight)
 		mov	cx,ax
@@ -3928,7 +3912,7 @@ handler33table	dw TSRcref:resetdriver_00
 
 
 		db 'This is NOT a Microsoft program, but some software expect here the following string:*** This is Copyright 1983 Microsoft ***'
-		;DOS/V's DOSSHELL checks this credit before using the INT33h driver.
+		;Microsoft Works (DOS/V version) and some other apps check this meta text before using the INT33h handler.
 
 handler33	proc
 		assume	ds:nothing,es:nothing
@@ -4411,7 +4395,7 @@ if DBCSDOSV
 		int	21h
 		mov	ax,ds
 		pop	ds
-		jc	@nodbcsfunc		; MS-DOS prior to v4.0 and some compatible DOS
+		jc	@nodbcsfunc		; MS-DOS prior to v4.0 and some non-IBM / Microsoft DOS
 		mov	word ptr cs:[dbcstblptr+2],ax	;segment address for table
 		mov	word ptr cs:[dbcstblptr],si	;offset address for table
 		jmp	@endgetdbcs
