@@ -35,7 +35,7 @@
 ; locals
 
 CTMVER		equ <"2.1">		; major driver version
-CTMRELEASE	equ <"2.1 b4V009">	; full driver version with suffixes
+CTMRELEASE	equ <"2.1 b4V010">	; full driver version with suffixes
 driverversion	equ 705h		; imitated Microsoft driver version
 ; at least 705h because our int 33 function _26 operates in 7.05+ style
 
@@ -2543,7 +2543,7 @@ getattrdbcs	proc
 ;	pop		bx
 ;	pop		ax
 
-	dec cx
+;	dec cx
 ;----------------------------------------
 ; in:
 ; 	bp = offset for chr/attr to scan
@@ -2577,10 +2577,10 @@ getattrdbcs	proc
 	pop		es
 ;----------------------------------------
 	pop		dx
-	dec dl
+;	dec dl
 ;	mov		dx,word ptr [dbcscursorposw]	;get current cursor position
 	cmp		cl,3
-	jne		@@sbcsordbcs1st	; skip if current pos is SBCS
+	jb		@@sbcsordbcs1st	; skip if current pos is SBCS
 	;move position one column back if the current pos is 2nd byte of DBCS char
 	sub		si,[dbcsbytesperchar]
 	mov		bp,si
