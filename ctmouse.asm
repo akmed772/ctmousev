@@ -433,9 +433,9 @@ endif						; -X- USERIL
 ;----- for DOS/V support -----
 if DBCSDOSV
 	dbcsstrbuf	db	4*81 dup (?)	;max 80 chr in line
-	dbcsdebugtext	db	2*80 dup (?)
 	dbcsint10calling	db	0
 ifdef DBCSDOSVDEBUG
+	dbcsdebugtext	db	2*80 dup (?)
 DEBUGOUT	macro	val	;logging to 86Box POST card
 	cli
 	push	ax
