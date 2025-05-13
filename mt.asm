@@ -1,4 +1,5 @@
-;video mode 3h, 73h mouse test program for DOS J5.0/V
+;Video mode 3h, 73h mouse test program for DOS J5.0/V
+;Copyright (c) 2025 Akamaki <https://github.com/akmed772>
 
 .model tiny
 assume ss:nothing
