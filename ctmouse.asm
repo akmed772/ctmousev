@@ -45,6 +45,7 @@ FOOLPROOF	 = 1		; check driver arguments validness
 USE28		 = 0		; include code for INT 33/0028 function
 USERIL           = 0		; include code for INT 10/Fn EGA functions
 DBCSDOSV	 = 1        ; include code for DOS/V
+DBCSMSG	     = 1        ; enable bilingual message for DOS/V
 
 ; %define PS2DEBUG 1		; print debug messages for PS2serv calls
 ; DBCSDOSVDEBUG	 = 1        ; debug code for DOS/V
@@ -2619,7 +2620,7 @@ ischardbcs endp
 ;    Determine the current DOS is in DBCS mode
 ;========================================================================
 ; In:   none
-; Out:	ZF
+; Out:	ZF (0=DBCS, 1=SBCS)
 ; Use:	dbcsisdosv, dbcstblptr
 ; Modf:	none
 ; Call: none
@@ -2970,10 +2971,12 @@ endif
 		shr	ax,cl
 
 @@setcommon:
+if DBCSDOSV
 		cmp	[dbcsbytesperchar],0
 		je	@@notdbcsvm03
 		mov	di,200
 @@notdbcsvm03:
+endif
 		mov	[screenheight],di
 		mov	[scanline],ax		; screen line width in bytes
 		mov	[bitmapshift],cl	; log2(screen/memory ratio)
@@ -4161,12 +4164,18 @@ TSRend		label byte
 
 ; messages segment virtual ; place at the end of current bsegment
 %include ?LANG.msg
+if DBCSDOSV AND DBCSMSG
+%include ?LANG2.msg		;include translated messages for DBCS DOS
+include ctm-dlang.inc		;include pointer table to support dual languages.
+else
+include ctm-slang.inc
+endif
 ; messages ends
 
-S_mousetype	dw dataref:S_atPS2
-		dw dataref:S_inMSYS
-		dw dataref:S_inLT
-		dw dataref:S_inMS
+S_mousetype	dw dataref:TS_atPS2
+		dw dataref:TS_inMSYS
+		dw dataref:TS_inLT
+		dw dataref:TS_inMS
 
 .data
 
@@ -4198,9 +4207,26 @@ real_start:	cld
 		DOSGetIntr 33h
 		saveFAR [oldint33],es,bx	; save old INT 33h handler
 
+;----- get DBCS lead-byte table
+if DBCSDOSV
+		push	ds
+		mov	ax,6300h
+		int	21h
+		mov	ax,ds
+		pop	ds
+		jc	@nodbcsfunc		; MS-DOS prior to v4.0 and some non-IBM / Microsoft DOS
+		mov	word ptr cs:[dbcstblptr+2],ax	;segment address for table
+		mov	word ptr cs:[dbcstblptr],si	;offset address for table
+		jmp	@endgetdbcs
+@nodbcsfunc:
+		mov	word ptr cs:[dbcstblptr+2],0	;segment address for table
+		mov	word ptr cs:[dbcstblptr],0	;offset address for table
+@endgetdbcs:
+endif
+
 ;----- parse command line and find mouse
 
-		say	@data:Copyright		; 'Cute Mouse Driver'
+		say	@data:TCopyright		; 'Cute Mouse Driver'
 		mov	si,offset PSP:cmdline_len
 		lodsb
 		cbw				; OPTIMIZE: instead MOV AH,0
@@ -4258,7 +4284,7 @@ real_start:	cld
 		jnc	@@serialfound
 ;	end_
 @@panz:
-		mov	di,dataref:E_notfound	; 'Error: device not found'
+		mov	di,dataref:TE_notfound	; 'Error: device not found'
 		jmp	EXITENABLE
 
 ;-----
@@ -4276,7 +4302,7 @@ real_start:	cld
 		test ah, OPT_newTSR shr 8	; ax,100h, TASM optimizes
 		jnz	@@newTSR
 		call	getCuteMouse
-		mov	di,dataref:S_reset	; 'Resident part reset to'
+		mov	di,dataref:TS_reset	; 'Resident part reset to'
 		mov	cx,4C02h		; terminate, al=return code
 
 ;	if_ ne
@@ -4294,7 +4320,7 @@ real_start:	cld
 		DOSSetIntr 33h,,,@TSRcode:handler33
 		POPSEG	ds,@data
 		pop	ax
-		mov	di,dataref:S_installed	; 'Installed at'
+		mov	di,dataref:TS_installed	; 'Installed at'
 		mov	cl,0			; errorlevel
 ;	end_ if
 @@mfz:
@@ -4306,11 +4332,11 @@ real_start:	cld
 		call    sayASCIIZ
 		mov	al,[mousetype]
 
-		mov	bx,dataref:S_CRLF
+		mov	bx,dataref:TS_CRLF
 		add	al,al
 ;	if_ carry				; if wheel (=8xh)
 	jnc @@mfnc
-		mov	bx,dataref:S_wheel
+		mov	bx,dataref:TS_wheel
 ;	end_
 @@mfnc:
 
@@ -4324,7 +4350,7 @@ real_start:	cld
 		inc	cx			; OPTIMIZE: CX instead CL
 ;	 end_
 @@mfnz:
-		say	@data:S_atCOM
+		say	@data:TS_atCOM
 ;	end_
 @@mfb:
 		push	cx			; exit function and errorlevel
@@ -4387,23 +4413,6 @@ if 1						; -X-
 @havevga:
 endif						; -X-
 ; endif						; -X- USERIL
-
-;----- get DBCS lead-byte table
-if DBCSDOSV
-		push	ds
-		mov	ax,6300h
-		int	21h
-		mov	ax,ds
-		pop	ds
-		jc	@nodbcsfunc		; MS-DOS prior to v4.0 and some non-IBM / Microsoft DOS
-		mov	word ptr cs:[dbcstblptr+2],ax	;segment address for table
-		mov	word ptr cs:[dbcstblptr],si	;offset address for table
-		jmp	@endgetdbcs
-@nodbcsfunc:
-		mov	word ptr cs:[dbcstblptr+2],0	;segment address for table
-		mov	word ptr cs:[dbcstblptr],0	;offset address for table
-@endgetdbcs:
-endif
 
 ;----- setup left hand mode handling
 
@@ -5075,7 +5084,7 @@ setCOMport	proc
 		mov	ax,COM_base[di-'1'-'1']
 		mov	[IO_address],ax
 
-		mov	di,dataref:S_atIO	; string for 4 digits
+		mov	di,dataref:TS_atIO	; string for 4 digits
 		MOVSEG	es,ds,,@data
 		_word_hex
 
@@ -5239,7 +5248,7 @@ parsedigit	proc
 ;	end_
 @@pda:
 		cmp	al,10
-		mov	cx,dataref:E_argument	; 'Error: Invalid argument'
+		mov	cx,dataref:TE_argument	; 'Error: Invalid argument'
 		jb	BADOPTION		; error if decimal digit
 		dec	si
 		stc
@@ -5258,7 +5267,7 @@ _checkdriver	proc
 		int	33h
 		inc	ax
 		jnz	@ret
-		mov	di,dataref:E_mousepresent ; 'Mouse service already...'
+		mov	di,dataref:TE_mousepresent ; 'Mouse service already...'
 		j	EXITMSG
 _checkdriver	endp
 
@@ -5311,7 +5320,7 @@ commandline	proc
 	jnz @@clnz
 		lodsb
 		and	al,not 20h		; uppercase
-		mov	di,dataref:Syntax	; 'Options:'
+		mov	di,dataref:TSyntax	; 'Options:'
 		mov	bx,dataref:OPTABLE
 ;	 loop_
 @@cloloop:
@@ -5332,36 +5341,63 @@ commandline	proc
 ;	end_ if
 @@clnz:
 
-		mov	cx,dataref:E_option	; 'Error: Invalid option'
-BADOPTION::	say	@data:E_error		; 'Error: Invalid '
+		mov	cx,dataref:TE_option	; 'Error: Invalid option'
+BADOPTION::	say	@data:TE_error		; 'Error: Invalid '
 ;		say	cx			; 'option'/'argument'
 		mov	di,cx
 		call	sayASCIIZ
-		mov	di,dataref:E_help	; 'Enter /? on command line'
+		mov	di,dataref:TE_help	; 'Enter /? on command line'
 
-EXITMSG::	mov	bl,[di]
-		inc	di
+EXITMSG::	;mov	bl,[di]
+		;inc	di
 ;		say	di
-		call	sayASCIIZ
-		say	@data:S_CRLF
+		call	sayASCIIZwithRC
+		xchg	ax,bx
+		say	@data:TS_CRLF
 		xchg	ax,bx			; OPTIMIZE: instead MOV AL,BL
 		.exit				; terminate, al=return code
 commandline	endp
 
 ;========================================================================
 ; In:	DS:DI			(null terminated string)
-; Out:	none
+; Out:	AL=exit code (when sayASCIIwithRC is called)
 ; Use:	none
-; Modf:	AH, DL, DI
+; Modf:	AH, AL, DL, DI
 ; Call:	none
 ;
 sayASCIIZ_	proc
+sayASCIIZwithRC::	;get message with exit code
+		mov		ah,1
+		jmp		@@getloc
+sayASCIIZ::
+		mov		ah,0
+@@getloc:
+if DBCSDOSV AND DBCSMSG
+		xchg	si,di
+		push	ax
+		call	detisdosdbcs
+		jnz		@@isdbcs
+		mov		di,[si]		;select pointer from language table
+		jmp		@@enddbcs
+@@isdbcs:
+		mov		di,[si+2]		;select pointer from language table
+@@enddbcs:
+		pop		ax
+else
+;		mov		di,[si]		;select pointer from language table
+endif
+		or		ah, ah
+		jz		@@chk1st
+		mov		al, [di]	;get exit code from translation file
+		inc		di
+		jmp		@@chk1st
 ;	loop_
 @@sazloop:
 		mov	ah,2
 		int	21h		; write character in DL to stdout
 		inc	di
-sayASCIIZ::	mov	dl,[di]
+@@chk1st:
+		mov	dl,[di]
 		test	dl,dl
 ;	until_ zero
 	jnz @@sazloop
@@ -5377,7 +5413,7 @@ sayASCIIZ_	endp
 
 unloadTSR	proc
 		call	getCuteMouse		; check if CTMOUSE installed
-		mov	di,dataref:E_nocute	; 'CuteMouse driver is not installed!'
+		mov	di,dataref:TE_nocute	; 'CuteMouse driver is not installed!'
 		jne	EXITMSG
 
 		push	es
@@ -5387,7 +5423,7 @@ unloadTSR	proc
 		pop	es
 
 		cmp	al,1Fh
-		mov	di,dataref:E_notunload	; 'Driver unload failed...'
+		mov	di,dataref:TE_notunload	; 'Driver unload failed...'
 ;	if_ eq
 	jnz @@unlnz
 		saveFAR	[oldint33],cx,bx
@@ -5399,7 +5435,7 @@ unloadTSR	proc
 		int	21h
 		pop	ds
 		call	FreeMem
-		mov	di,dataref:S_unloaded	; 'Driver successfully unloaded...'
+		mov	di,dataref:TS_unloaded	; 'Driver successfully unloaded...'
 ;	end_
 @@unlnz:
 
