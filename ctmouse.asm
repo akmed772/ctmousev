@@ -46,6 +46,7 @@ USE28		 = 0		; include code for INT 33/0028 function
 USERIL           = 0		; include code for INT 10/Fn EGA functions
 DBCSDOSV	 = 1        ; include code for DOS/V
 DBCSMSG	     = 1        ; enable bilingual message for DOS/V
+VTEXT		 = (1 AND DBCSDOSV)	; support over 80x25 text mode for DOS/V
 
 ; %define PS2DEBUG 1		; print debug messages for PS2serv calls
 ; DBCSDOSVDEBUG	 = 1        ; debug code for DOS/V
@@ -433,7 +434,11 @@ endif						; -X- USERIL
 
 ;----- for DOS/V support -----
 if DBCSDOSV
+if VTEXT
+	dbcsstrbuf	db	4*256 dup (?)	;max 255 chr in line
+else
 	dbcsstrbuf	db	4*81 dup (?)	;max 80 chr in line
+endif
 	oldint10calling	db	0
 ifdef DBCSDOSVDEBUG
 	dbcsdebugtext	db	2*80 dup (?)
@@ -2510,7 +2515,7 @@ getattrdbcs	proc
 ;	jae		@@midtext	; char pos x >=2
 ;	add		cl,2		; to determine if the char is DBCS
 	mov		dl,0		; read characters from the head of the line
-	inc		cl
+	inc		cx
 ;	jmp		@@readchr
 ;@@midtext: this doesn't recognize a DBCS sequence include lead-byte range only.
 ;           so we need seek the entire bytes in the line
