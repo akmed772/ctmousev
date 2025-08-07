@@ -434,7 +434,7 @@ endif						; -X- USERIL
 ;----- for DOS/V support -----
 if DBCSDOSV
 	dbcsstrbuf	db	4*81 dup (?)	;max 80 chr in line
-	dbcsint10calling	db	0
+	oldint10calling	db	0
 ifdef DBCSDOSVDEBUG
 	dbcsdebugtext	db	2*80 dup (?)
 DEBUGOUT	macro	val	;logging to 86Box POST card
@@ -1322,7 +1322,16 @@ if USERIL					; -X-
 		cmp	ah,0FAh
 		je	@@RIL_FA
 endif						; -X- USERIL
+if DBCSDOSV
+@@jmpold10:
+		inc	cs: [oldint10calling]
+		pushf
+		call_far oldint10
+		dec	cs: [oldint10calling]
+		iret
+else
 @@jmpold10:	jmp_far	oldint10
+endif
 
 @@setnewfont:	cmp	al,10h
 		jb	@@jmpold10
@@ -1338,8 +1347,15 @@ endif						; -X- USERIL
 		push	cs			;  Windows driver workaround
 		call	handler33		; hide mouse cursor
 		pop	ax
+if DBCSDOSV
+		inc	cs: [oldint10calling]
 		pushf
-		call	[oldint10]
+		call	cs: [oldint10]
+		dec	cs: [oldint10calling]
+else
+		pushf
+		call	cs: [oldint10]
+endif
 		push	ds
 		push	es
 		PUSHALL
@@ -2371,11 +2387,11 @@ checkifseen	endp
 if DBCSDOSV
 
 INT10RWCHARDOSV		macro
-	mov	[dbcsint10calling],1
+;	mov	[dbcsint10calling],1
 ;	pushf
 ;	call	[oldint10]
 	int	10h
-	mov	[dbcsint10calling],0
+;	mov	[dbcsint10calling],0
 endm
 
 ;========================================================================
@@ -2383,14 +2399,14 @@ endm
 ;========================================================================
 ; In:   ES:BP (char buffer), DS:SI
 ; Out:	
-; Use:	dbcsint10calling, granpos.x, cursorwidth, startscan, endscan
+; Use:	oldint10calling, granpos.x, cursorwidth, startscan, endscan
 ; Modf:	AX, BX, CX, DX, ES, BP, dbcscursorposh, dbcscursorposw, 
 ;		dbcsbufsize, dbcsbuf1, dbcsbuf2, textbuf
 ; Call:	getattrdbcs, INT10RWCHARDOSV
 storedbcsattr	proc
 	;convert vscreen x-y to box x-y
-	cmp [dbcsint10calling], 1
-	je	@@skipall
+	cmp [oldint10calling], 0
+	jne	@@skipall
 	mov	ax,[granpos.Y]	;current cursor y position (px)
 	;mov bx,8			;height of character (px)
 	;div	bx
@@ -2444,13 +2460,13 @@ storedbcsattr endp
 ;========================================================================
 ; In:   none
 ; Out:	none
-; Use:	dbcsint10calling, granpos.x, cursorwidth, startscan, endscan
+; Use:	oldint10calling, granpos.x, cursorwidth, startscan, endscan
 ; Modf:	AX, BX, CX, DX, ES, BP, 
 ;		dbcsbufsize, dbcsbuf1, dbcsbuf2, textbuf
 ; Call:	getattrdbcs, INT10RWCHARDOSV
 restoredbcsattr	proc
-	cmp [dbcsint10calling],1
-	je	@@skipall
+	cmp [oldint10calling], 0
+	jne	@@skipall
 	mov	dx,word ptr [dbcscursorposw]
 	call	getattrdbcs
 	;cl = (1: SBCS, 2: DBCS 1st/2nd)
