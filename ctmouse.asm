@@ -499,21 +499,6 @@ DEBUGSCRWRITE	macro
 	pop		ax
 	pop		es
 endm
-DEBUGFPRINT macro val8
-	push ax
-	push cx
-	push dx
-	mov	al,val8
-	call bintohex	;dh,dl=hex in char code
-	mov ah,03ch
-	xor cx,cx
-	mov dx,Name_FileDbg
-	int 021h
-
-	pop	dx
-	pop	cx
-	pop	ax
-endm
 DEBUGPRINT macro val8,dcposx
 	push ax
 	push dx
