@@ -442,14 +442,12 @@ endif						; -X- USERIL
 ;----- for DOS/V support -----
 if DBCSDOSV
 	oldint10calling	db	0
-
-	db 'DBCSBuf_Begin->'
 if VTEXT
 	dbcsstrbuf	db	4*256 dup (?)	;max 255 chr in line
 else
 	dbcsstrbuf	db	4*81 dup (?)	;max 80 chr in line
 endif
-	db '<-End_DBCSBuf'
+
 ifdef DBCSDOSVDEBUG
 	dbcsdebugtext	db	2*80 dup (?)
 DEBUGOUT	macro	val	;logging to 86Box POST card
