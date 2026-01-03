@@ -28,25 +28,25 @@ DS_inLT		db 'Logitech mode',eos
 DS_wheel		db ' (wheel present)'
 DS_CRLF		db nl,eos
 
-DCopyright	db nl,'CuteMouse v',CTMRELEASE,' with DOS/V support',nl,eos
+DCopyright	db nl,'CuteMouse v',CTMRELEASE,CTMBUILD,nl,eos
 DSyntax		label byte
     db 0,nl,'オプション：',nl
     db '  /V	   - 逆探索：シリアルマウスの後にPS/2マウスを探す',nl
-    db '  /P	   - シリアルポートを探さず、PS/2マウスモードを強制する',nl
-    db '  /S[c[i]] - COMポート c (1-4)、IRQ i (1-7) でシリアルマウスモードを強制する',nl
-    db '  /3	   - マイクロソフトまたはPS/2マウスで3ボタンモードを強制する',nl
+    db '  /P	   - シリアルポートを探さず、PS/2マウスを強制',nl
+    db '  /S[c[i]] - COMポート c (1-4)、IRQ i (1-7) でシリアルマウスを強制',nl
+    db '  /3	   - マイクロソフトまたはPS/2マウスで3ボタンモードを強制',nl
 ; Note: /O now acts inverse compared to 2.1 beta 3
-    db '  /O       - PS/2やBIOS USBホイール検出を有効にする (フリーズする可能性あり)',nl
+    db '  /O       - PS/2やBIOS USBホイール検出を有効にする (動作不安定)',nl
 ; 2008: made /Y (ignore MSys) the default and introduced /M (enable MSys)
 ;   db '  /Y	   - 非 PNPデバイスへの Mouse Systems モードを試さない',nl,nl
     db '  /M       - Mouse Systems / Genius 製の非PNPマウスを試す',nl,nl
     db '  /R[h[v]] - 水平/垂直分解能: h,v = 1-9 または 0 (自動)',nl
-    db '	     (指定無し = 既定：hを自動、vをhと同じ指定とする)',nl
-    db '  /L	   - 左右のボタンを入れ替える',nl,nl
+    db '	     (既定：hを自動、vをhと同じに指定)',nl
+    db '  /L	   - ボタンを左右入れ替える',nl,nl
 ;
-    db '  /B	   - 既に CuteMouse が常駐している場合は実行を中止する',nl
-    db '  /N	   - 既に CuteMouse が常駐していても新しく常駐する',nl
+    db '  /B	   - 既に CuteMouse が常駐している場合は実行を中止',nl
+    db '  /N	   - 既に CuteMouse が常駐していても新しく常駐',nl
     db '	     (バッチファイルの最後に解放する場合などに使用)',nl
     db '  /W	   - CuteMouse を UMB メモリーにロードしない',nl
-    db '  /U	   - CuteMouse をアンインストール、メモリーへの常駐を解放する',nl
-    db '  /?	   - このヘルプを表示する',eos
+    db '  /U	   - CuteMouse をアンインストール、メモリーへの常駐を解放',nl
+    db '  /?	   - このヘルプを表示',eos

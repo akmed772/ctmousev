@@ -1,7 +1,7 @@
 ; CTMOUSEV - a tiny mouse driver with DOS/V support
 ;
 ; Copyright (c) 1997-2002 Nagy Daniel <nagyd@users.sourceforge.net>
-;                    2025 Akamaki <https://github.com/akmed772>
+;               2025-2026 Akamaki <https://github.com/akmed772>
 ;
 ; BIOS wheel mouse support: Ported from Konstantin Koll's public
 ; domain code into Cute Mouse by Eric Auer 2007 (places marked -X-)
@@ -34,11 +34,6 @@
 ; warn
 ; locals
 
-CTMVER		equ <"2.1">		; major driver version
-CTMRELEASE	equ <"2.1 b4V01">	; full driver version with suffixes
-driverversion	equ 705h		; imitated Microsoft driver version
-; at least 705h because our int 33 function _26 operates in 7.05+ style
-
 FASTER_CODE	 = 0		; optimize by speed instead size
 OVERFLOW_PROTECT = 0		; prevent variables overflow
 FOOLPROOF	 = 1		; check driver arguments validness
@@ -50,6 +45,18 @@ VTEXT		 = (1 AND DBCSDOSV)	; support over 80x25 text mode for DOS/V
 
 ; %define PS2DEBUG 1		; print debug messages for PS2serv calls
 ; DBCSDOSVDEBUG	 = 1        ; debug code for DOS/V
+
+CTMVER		equ <"2.1">		; major driver version
+CTMRELEASE	equ <"2.1 b4V02">	; full driver version with suffixes
+if VTEXT
+CTMBUILD	equ <" with V-Text support">	; build info
+elseif DBCSDOSV
+CTMBUILD	equ <" with DOS/V support">	; build info
+else
+CTMBUILD	equ <"">	; build info
+endif
+driverversion	equ 705h		; imitated Microsoft driver version
+; at least 705h because our int 33 function _26 operates in 7.05+ style
 
 ;------------------------------------------------------------------------
 
@@ -434,12 +441,15 @@ endif						; -X- USERIL
 
 ;----- for DOS/V support -----
 if DBCSDOSV
+	oldint10calling	db	0
+
+	db 'DBCSBuf_Begin->'
 if VTEXT
 	dbcsstrbuf	db	4*256 dup (?)	;max 255 chr in line
 else
 	dbcsstrbuf	db	4*81 dup (?)	;max 80 chr in line
 endif
-	oldint10calling	db	0
+	db '<-End_DBCSBuf'
 ifdef DBCSDOSVDEBUG
 	dbcsdebugtext	db	2*80 dup (?)
 DEBUGOUT	macro	val	;logging to 86Box POST card
@@ -2645,7 +2655,7 @@ ischardbcs endp
 ; Use:	dbcsisdosv, dbcstblptr
 ; Modf:	none
 ; Call: none
-detisdosdbcs	proc
+isdosdbcs	proc
 	push	si
 	push	ax
 	push	ds
@@ -2660,8 +2670,52 @@ detisdosdbcs	proc
 	pop	ax
 	pop	si
 	ret
-detisdosdbcs	endp
+isdosdbcs	endp
 
+;========================================================================
+;    Search a V-Text driver and get the vector address for mouse funcs
+;========================================================================
+; In:   none
+; Out:	CF (0=installed, 1=not installed or error)
+; Use:	
+; Modf:	none
+; Call: none
+;if VTEXT
+;getvtext	proc
+;	push	es
+;	push	ax
+;	push	bx
+;	push	cx
+;	mov	ax,01131h
+;	xor	cx,cx
+;	int	10h
+;	or	cx,cx
+;	jz	@@novtext	;CX=0 if the v-text driver is not installed
+;	mov	ax,05010h
+;	int	15h
+;	jc	@@novtext
+;	mov	bx,[bx+0Ah]	;get FAR pointer for the function parameter table of V-text driver
+;	mov	es,[bx+08h]
+;	SAVEFAR	[cs:vt_ptrFuncTable],es,bx
+;	mov	ax,es:[bx+0EH]	;get NEAR pointer for cursor functions
+;	mov	[cs:vt_ptrSetCursorShape],ax
+;	mov	ax,es:[bx+10H]
+;	mov	[cs:vt_ptrPutCursor],ax
+;	mov	ax,es:[bx+12H]
+;	mov	[cs:vt_ptrEraseCursor],ax
+;	clc
+;	jmp	@@endvtext
+;@@novtext:
+;	mov	word ptr [cs:vt_ptrFuncTable],0;reset pointer
+;	stc
+;@@endvtext:
+;	pop	cx
+;	pop	bx
+;	pop	ax
+;	pop	es
+;	ret
+;getvtext	endp
+;endif
 ;========================================================================
 ;    Determine the video memory is simulated
 ;========================================================================
@@ -2859,22 +2913,29 @@ endif						; -X- USERIL
 
 if DBCSDOSV
 		mov	[cs:dbcsbytesperchar],0	;reset value
-		call	detisdosdbcs
+		call	isdosdbcs
 	jz	@@notdosv
 		cmp al,3
 	je	@@vm3
 		cmp	al,073h
-	je	@@vm73
+	je	@@vm71or73
+  if VTEXT
+		cmp	al,070h
+	je	@@vm3sor70
+		cmp	al,071h
+	je	@@vm71or73
+  endif
 	jne	@@notdosv
 @@vm3:
 ; if $disp.sys is active, the actual video memory is located at A0000-AFFFFh
 		call	testb800
 	jnc	@@notdosv
-		mov	[cs:dbcsbytesperchar], 2
-	jmp	@@vm3or73end
-@@vm73:
-		mov	[cs:dbcsbytesperchar], 4
-@@vm3or73end:
+@@vm3sor70:
+		mov	[cs:dbcsbytesperchar], 2	; simulated vm3
+	jmp	@@vm3send
+@@vm71or73:
+		mov	[cs:dbcsbytesperchar], 4	; vm73
+@@vm3send:
 @@notdosv:
 endif
 
@@ -2893,6 +2954,12 @@ endif
 if DBCSDOSV
 		cmp	al,073h
 		je	@@stb
+  if VTEXT
+		cmp	al,070h
+		je	@@stb
+		cmp	al,071h
+		je	@@stb
+  endif
 endif
 ; mode 7
 		cmp	al,7
@@ -2995,7 +3062,7 @@ endif
 if DBCSDOSV
 		cmp	[dbcsbytesperchar],0
 		je	@@notdbcsvm03
-		mov	di,200
+;		mov	di,200
 @@notdbcsvm03:
 endif
 		mov	[screenheight],di
@@ -5396,7 +5463,7 @@ sayASCIIZ::
 if DBCSDOSV AND DBCSMSG
 		xchg	si,di
 		push	ax
-		call	detisdosdbcs
+		call	isdosdbcs
 		jnz		@@isdbcs
 		mov		di,[si]		;select pointer from language table
 		jmp		@@enddbcs
