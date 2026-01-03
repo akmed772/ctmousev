@@ -1,7 +1,7 @@
 ; CTMOUSEV - a tiny mouse driver with DOS/V support
 ;
 ; Copyright (c) 1997-2002 Nagy Daniel <nagyd@users.sourceforge.net>
-;                    2025 Akamaki <https://github.com/akmed772>
+;               2025-2026 Akamaki <https://github.com/akmed772>
 ;
 ; BIOS wheel mouse support: Ported from Konstantin Koll's public
 ; domain code into Cute Mouse by Eric Auer 2007 (places marked -X-)
@@ -34,22 +34,29 @@
 ; warn
 ; locals
 
-CTMVER		equ <"2.1">		; major driver version
-CTMRELEASE	equ <"2.1 b4V01">	; full driver version with suffixes
-driverversion	equ 705h		; imitated Microsoft driver version
-; at least 705h because our int 33 function _26 operates in 7.05+ style
-
 FASTER_CODE	 = 0		; optimize by speed instead size
 OVERFLOW_PROTECT = 0		; prevent variables overflow
 FOOLPROOF	 = 1		; check driver arguments validness
 USE28		 = 0		; include code for INT 33/0028 function
 USERIL           = 0		; include code for INT 10/Fn EGA functions
 DBCSDOSV	 = 1        ; include code for DOS/V
-DBCSMSG	     = 1        ; enable bilingual message for DOS/V
+DBCSMSG		 = 1        ; enable bilingual message for DOS/V
 VTEXT		 = (1 AND DBCSDOSV)	; support over 80x25 text mode for DOS/V
 
 ; %define PS2DEBUG 1		; print debug messages for PS2serv calls
 ; DBCSDOSVDEBUG	 = 1        ; debug code for DOS/V
+
+CTMVER		equ <"2.1">		; major driver version
+CTMRELEASE	equ <"2.1 b4V02">	; full driver version with suffixes
+if VTEXT
+CTMBUILD	equ <" with V-Text support">	; build info
+elseif DBCSDOSV
+CTMBUILD	equ <" with DOS/V support">	; build info
+else
+CTMBUILD	equ <"">	; build info
+endif
+driverversion	equ 705h		; imitated Microsoft driver version
+; at least 705h because our int 33 function _26 operates in 7.05+ style
 
 ;------------------------------------------------------------------------
 
@@ -434,12 +441,13 @@ endif						; -X- USERIL
 
 ;----- for DOS/V support -----
 if DBCSDOSV
+	oldint10calling	db	0
 if VTEXT
 	dbcsstrbuf	db	4*256 dup (?)	;max 255 chr in line
 else
 	dbcsstrbuf	db	4*81 dup (?)	;max 80 chr in line
 endif
-	oldint10calling	db	0
+
 ifdef DBCSDOSVDEBUG
 	dbcsdebugtext	db	2*80 dup (?)
 DEBUGOUT	macro	val	;logging to 86Box POST card
@@ -488,21 +496,6 @@ DEBUGSCRWRITE	macro
 	pop		bx
 	pop		ax
 	pop		es
-endm
-DEBUGFPRINT macro val8
-	push ax
-	push cx
-	push dx
-	mov	al,val8
-	call bintohex	;dh,dl=hex in char code
-	mov ah,03ch
-	xor cx,cx
-	mov dx,Name_FileDbg
-	int 021h
-
-	pop	dx
-	pop	cx
-	pop	ax
 endm
 DEBUGPRINT macro val8,dcposx
 	push ax
@@ -2645,7 +2638,7 @@ ischardbcs endp
 ; Use:	dbcsisdosv, dbcstblptr
 ; Modf:	none
 ; Call: none
-detisdosdbcs	proc
+isdosdbcs	proc
 	push	si
 	push	ax
 	push	ds
@@ -2660,7 +2653,32 @@ detisdosdbcs	proc
 	pop	ax
 	pop	si
 	ret
-detisdosdbcs	endp
+isdosdbcs	endp
+
+;========================================================================
+;    Does the current video mode have eq or less than 80 columns?
+;========================================================================
+; In:   none
+; Out:	CF (0=Yes, 1=No)
+; Use:	
+; Modf:	none
+; Call: none
+is80column	proc
+	push	ax
+	push	bx
+	mov	ah,0Fh
+	int	10h
+	cmp	ah,80
+	ja	@@above80
+	clc
+	jmp	@@exit
+@@above80:
+	stc
+@@exit:
+	pop	bx
+	pop	ax
+	ret
+is80column	endp
 
 ;========================================================================
 ;    Determine the video memory is simulated
@@ -2858,23 +2876,37 @@ endif						; -X- USERIL
 		pop	ax			; current video mode
 
 if DBCSDOSV
-		mov	[cs:dbcsbytesperchar],0	;reset value
-		call	detisdosdbcs
+		mov	[dbcsbytesperchar],0	;reset value
+		call	isdosdbcs
 	jz	@@notdosv
 		cmp al,3
 	je	@@vm3
 		cmp	al,073h
-	je	@@vm73
-	jne	@@notdosv
+	je	@@vm71or73
+  if VTEXT
+		cmp	al,070h
+	je	@@vm3sor70
+		cmp	al,071h
+	je	@@vm71or73
+  endif
+	jmp	@@notdosv
 @@vm3:
 ; if $disp.sys is active, the actual video memory is located at A0000-AFFFFh
 		call	testb800
 	jnc	@@notdosv
-		mov	[cs:dbcsbytesperchar], 2
-	jmp	@@vm3or73end
-@@vm73:
-		mov	[cs:dbcsbytesperchar], 4
-@@vm3or73end:
+@@vm3sor70:
+		mov	[dbcsbytesperchar], 2	; simulated vm3
+	jmp	@@vm3send
+@@vm71or73:
+		mov	[dbcsbytesperchar], 4	; vm73
+@@vm3send:
+  if	VTEXT	;the driver has 255-column buffer for DOS/V video modes
+  else		;the driver has 80-column buffer for DOS/V video modes
+	call	is80column; CF (0=Yes, 1=No)
+	jnc	@@vmis80column
+	mov	[dbcsbytesperchar], 0	;if >80 columns, disable DBCS support to avoid buffer overflow
+  endif
+@@vmis80column:
 @@notdosv:
 endif
 
@@ -2893,6 +2925,12 @@ endif
 if DBCSDOSV
 		cmp	al,073h
 		je	@@stb
+  if VTEXT
+		cmp	al,070h
+		je	@@stb
+		cmp	al,071h
+		je	@@stb
+  endif
 endif
 ; mode 7
 		cmp	al,7
@@ -2992,12 +3030,6 @@ endif
 		shr	ax,cl
 
 @@setcommon:
-if DBCSDOSV
-		cmp	[dbcsbytesperchar],0
-		je	@@notdbcsvm03
-		mov	di,200
-@@notdbcsvm03:
-endif
 		mov	[screenheight],di
 		mov	[scanline],ax		; screen line width in bytes
 		mov	[bitmapshift],cl	; log2(screen/memory ratio)
@@ -5396,7 +5428,7 @@ sayASCIIZ::
 if DBCSDOSV AND DBCSMSG
 		xchg	si,di
 		push	ax
-		call	detisdosdbcs
+		call	isdosdbcs
 		jnz		@@isdbcs
 		mov		di,[si]		;select pointer from language table
 		jmp		@@enddbcs
