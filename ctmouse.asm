@@ -2922,7 +2922,7 @@ endif						; -X- USERIL
 		pop	ax			; current video mode
 
 if DBCSDOSV
-		mov	[cs:dbcsbytesperchar],0	;reset value
+		mov	[dbcsbytesperchar],0	;reset value
 		call	isdosdbcs
 	jz	@@notdosv
 		cmp al,3
@@ -2941,16 +2941,16 @@ if DBCSDOSV
 		call	testb800
 	jnc	@@notdosv
 @@vm3sor70:
-		mov	[cs:dbcsbytesperchar], 2	; simulated vm3
+		mov	[dbcsbytesperchar], 2	; simulated vm3
 	jmp	@@vm3send
 @@vm71or73:
-		mov	[cs:dbcsbytesperchar], 4	; vm73
+		mov	[dbcsbytesperchar], 4	; vm73
 @@vm3send:
   if	VTEXT	;the driver has 255-column buffer for DOS/V video modes
   else		;the driver has 80-column buffer for DOS/V video modes
 	call	is80column; CF (0=Yes, 1=No)
 	jnc	@@vmis80column
-	mov	[cs:dbcsbytesperchar], 0	;if >80 columns, disable DBCS support to avoid buffer overflow
+	mov	[dbcsbytesperchar], 0	;if >80 columns, disable DBCS support to avoid buffer overflow
   endif
 @@vmis80column:
 @@notdosv:
@@ -3076,12 +3076,6 @@ endif
 		shr	ax,cl
 
 @@setcommon:
-if DBCSDOSV
-		cmp	[dbcsbytesperchar],0
-		je	@@notdbcsvm03
-;		mov	di,200
-@@notdbcsvm03:
-endif
 		mov	[screenheight],di
 		mov	[scanline],ax		; screen line width in bytes
 		mov	[bitmapshift],cl	; log2(screen/memory ratio)
