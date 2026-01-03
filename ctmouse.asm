@@ -40,7 +40,7 @@ FOOLPROOF	 = 1		; check driver arguments validness
 USE28		 = 0		; include code for INT 33/0028 function
 USERIL           = 0		; include code for INT 10/Fn EGA functions
 DBCSDOSV	 = 1        ; include code for DOS/V
-DBCSMSG	     = 1        ; enable bilingual message for DOS/V
+DBCSMSG		 = 1        ; enable bilingual message for DOS/V
 VTEXT		 = (1 AND DBCSDOSV)	; support over 80x25 text mode for DOS/V
 
 ; %define PS2DEBUG 1		; print debug messages for PS2serv calls
@@ -2683,50 +2683,6 @@ is80column	proc
 is80column	endp
 
 ;========================================================================
-;    Search a V-Text driver and get the vector address for mouse funcs
-;========================================================================
-; In:   none
-; Out:	CF (0=installed, 1=not installed or error)
-; Use:	
-; Modf:	none
-; Call: none
-;if VTEXT
-;getvtext	proc
-;	push	es
-;	push	ax
-;	push	bx
-;	push	cx
-;	mov	ax,01131h
-;	xor	cx,cx
-;	int	10h
-;	or	cx,cx
-;	jz	@@novtext	;CX=0 if the v-text driver is not installed
-;	mov	ax,05010h
-;	int	15h
-;	jc	@@novtext
-;	mov	bx,[bx+0Ah]	;get FAR pointer for the function parameter table of V-text driver
-;	mov	es,[bx+08h]
-;	SAVEFAR	[cs:vt_ptrFuncTable],es,bx
-;	mov	ax,es:[bx+0EH]	;get NEAR pointer for cursor functions
-;	mov	[cs:vt_ptrSetCursorShape],ax
-;	mov	ax,es:[bx+10H]
-;	mov	[cs:vt_ptrPutCursor],ax
-;	mov	ax,es:[bx+12H]
-;	mov	[cs:vt_ptrEraseCursor],ax
-;	clc
-;	jmp	@@endvtext
-;@@novtext:
-;	mov	word ptr [cs:vt_ptrFuncTable],0;reset pointer
-;	stc
-;@@endvtext:
-;	pop	cx
-;	pop	bx
-;	pop	ax
-;	pop	es
-;	ret
-;getvtext	endp
-;endif
-;========================================================================
 ;    Determine the video memory is simulated
 ;========================================================================
 ; In:   none
@@ -2935,7 +2891,7 @@ if DBCSDOSV
 		cmp	al,071h
 	je	@@vm71or73
   endif
-	jne	@@notdosv
+	jmp	@@notdosv
 @@vm3:
 ; if $disp.sys is active, the actual video memory is located at A0000-AFFFFh
 		call	testb800
