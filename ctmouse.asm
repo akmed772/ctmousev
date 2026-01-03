@@ -2658,6 +2658,31 @@ isdosdbcs	proc
 isdosdbcs	endp
 
 ;========================================================================
+;    Does the current video mode have eq or less than 80 columns?
+;========================================================================
+; In:   none
+; Out:	CF (0=Yes, 1=No)
+; Use:	
+; Modf:	none
+; Call: none
+is80column	proc
+	push	ax
+	push	bx
+	mov	ah,0Fh
+	int	10h
+	cmp	ah,80
+	ja	@@above80
+	clc
+	jmp	@@exit
+@@above80:
+	stc
+@@exit:
+	pop	bx
+	pop	ax
+	ret
+is80column	endp
+
+;========================================================================
 ;    Search a V-Text driver and get the vector address for mouse funcs
 ;========================================================================
 ; In:   none
@@ -2921,6 +2946,13 @@ if DBCSDOSV
 @@vm71or73:
 		mov	[cs:dbcsbytesperchar], 4	; vm73
 @@vm3send:
+  if	VTEXT	;the driver has 255-column buffer for DOS/V video modes
+  else		;the driver has 80-column buffer for DOS/V video modes
+	call	is80column; CF (0=Yes, 1=No)
+	jnc	@@vmis80column
+	mov	[cs:dbcsbytesperchar], 0	;if >80 columns, disable DBCS support to avoid buffer overflow
+  endif
+@@vmis80column:
 @@notdosv:
 endif
 
